@@ -96,11 +96,7 @@ resource "null_resource" "vps_provision" {
     inline = [
       "set -e",
 
-      # Install Docker if not present
-      "if ! command -v docker &>/dev/null; then",
-      "  curl -fsSL https://get.docker.com | sh",
-      "  sudo usermod -aG docker ${var.ssh_user}",
-      "fi",
+      "if ! command -v docker &>/dev/null; then curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker ${var.ssh_user}; fi",
 
       "docker compose version",
 
@@ -115,16 +111,7 @@ resource "null_resource" "vps_provision" {
 
       # Issue wildcard cert via DNS challenge (covers all *.terraform.domain.com)
       # Requires certbot-dns-cloudflare plugin and CF credentials
-      var.enable_ssl && var.enable_nginx ? join("\n", [
-        "echo '==> Issuing wildcard SSL cert via Cloudflare DNS challenge'",
-        "docker compose -f ${local.deploy_dir}/docker-compose.yml run --rm certbot certonly",
-        "  --dns-cloudflare",
-        "  --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini",
-        "  --email ${var.ssl_email}",
-        "  --agree-tos --no-eff-email",
-        "  -d ${local.wildcard_domain}",
-        "docker compose -f ${local.deploy_dir}/docker-compose.yml restart nginx",
-      ]) : "echo '==> SSL skipped'",
+      var.enable_ssl && var.enable_nginx ? "echo '==> Issuing wildcard SSL cert via Cloudflare DNS challenge' && docker compose -f ${local.deploy_dir}/docker-compose.yml run --rm certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --email ${var.ssl_email} --agree-tos --no-eff-email -d ${local.wildcard_domain} && docker compose -f ${local.deploy_dir}/docker-compose.yml restart nginx" : "echo '==> SSL skipped'",
 
       # Beszel agent runs on the host (not in a container) to access Docker socket and host metrics
       var.enable_monitoring ? join("\n", [

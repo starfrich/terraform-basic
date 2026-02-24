@@ -1,0 +1,44 @@
+services:
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
+    networks:
+      - internal
+    depends_on:
+      - app
+
+  app:
+    image: ${APP_IMAGE:-node:20-alpine}
+    restart: unless-stopped
+    # No `ports:` — only reachable from within the internal network
+    networks:
+      - internal
+    environment:
+      - NODE_ENV=production
+    command: ["node", "server.js"]
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    # Not a long-running service — only invoked manually or via cron
+    profiles:
+      - certbot
+
+networks:
+  internal:
+    driver: bridge
+    # No external: true — this network is private and not accessible from outside
+
+volumes:
+  certbot_www:
+  certbot_conf:

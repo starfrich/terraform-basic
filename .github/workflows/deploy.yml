@@ -66,6 +66,7 @@ jobs:
             -var="ssl_email=${{ secrets.SSL_EMAIL }}" \
             -var="app_image=${{ secrets.APP_IMAGE }}" \
             -var="ssh_port=${{ secrets.SSH_PORT }}" \
+            -var="ssh_user=${{ secrets.SSH_USER }}" \
             -var="enable_nginx=${{ github.event.inputs.enable_nginx || 'true' }}" \
             -var="enable_ssl=${{ github.event.inputs.enable_ssl || 'true' }}" \
             -var="enable_monitoring=${{ github.event.inputs.enable_monitoring || 'false' }}"
@@ -85,6 +86,7 @@ jobs:
             -var="ssl_email=${{ secrets.SSL_EMAIL }}" \
             -var="app_image=${{ secrets.APP_IMAGE }}" \
             -var="ssh_port=${{ secrets.SSH_PORT }}" \
+            -var="ssh_user=${{ secrets.SSH_USER }}" \
             -var="enable_nginx=${{ github.event.inputs.enable_nginx || 'true' }}" \
             -var="enable_ssl=${{ github.event.inputs.enable_ssl || 'true' }}" \
             -var="enable_monitoring=${{ github.event.inputs.enable_monitoring || 'false' }}"

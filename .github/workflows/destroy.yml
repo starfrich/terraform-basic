@@ -1,0 +1,84 @@
+# ============================================================
+# .github/workflows/destroy.yml
+# Manual-only workflow to tear down a deployment
+# ============================================================
+
+name: Destroy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      subdomain:
+        description: "Subdomain to destroy (e.g. staging-01, prod-a1b2)"
+        required: true
+      target:
+        description: "What to destroy"
+        required: true
+        default: "containers"
+        type: choice
+        options:
+          - containers   # docker compose down on VPS only
+          - all          # full terraform destroy
+
+env:
+  TF_VERSION: "1.7.5"
+  WORKING_DIR: "./terraform"
+
+jobs:
+  destroy:
+    name: Terraform Destroy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Prepare SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.VPS_IP }}" >> ~/.ssh/known_hosts
+
+      - name: Terraform Init
+        run: terraform init
+
+      # Stop and remove containers only — does not touch DNS or Terraform state
+      - name: Docker Compose Down
+        if: github.event.inputs.target == 'containers'
+        run: |
+          ssh -p "${{ secrets.SSH_PORT }}" \
+            -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            "${{ secrets.SSH_USER }}@${{ secrets.VPS_IP }}" \
+            "cd /opt/app/${{ github.event.inputs.subdomain }} && docker compose down --rmi all --volumes"
+
+      # Full destroy — removes all Terraform-managed resources
+      - name: Terraform Destroy
+        if: github.event.inputs.target == 'all'
+        run: |
+          terraform destroy -auto-approve \
+            -var="vps_ip=${{ secrets.VPS_IP }}" \
+            -var="ssh_private_key=$(cat ~/.ssh/deploy_key)" \
+            -var="cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -var="cloudflare_zone_id=${{ secrets.CLOUDFLARE_ZONE_ID }}" \
+            -var="domain=${{ secrets.DOMAIN }}" \
+            -var="subdomain=${{ github.event.inputs.subdomain }}" \
+            -var="ssl_email=${{ secrets.SSL_EMAIL }}" \
+            -var="app_image=${{ secrets.APP_IMAGE }}" \
+            -var="ssh_port=${{ secrets.SSH_PORT }}" \
+            -var="ssh_user=${{ secrets.SSH_USER }}"
+        env:
+          TF_IN_AUTOMATION: "true"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

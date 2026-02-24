@@ -31,6 +31,8 @@ services:
     volumes:
       - certbot_www:/var/www/certbot
       - certbot_conf:/etc/letsencrypt
+      # Mount host credentials file into the container (read-only)
+      - /etc/letsencrypt/cloudflare.ini:/etc/letsencrypt/cloudflare.ini:ro
     # Not a long-running service — only invoked manually or via cron
     profiles:
       - certbot

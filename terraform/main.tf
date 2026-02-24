@@ -26,9 +26,18 @@ locals {
   wildcard_domain = "*.${var.domain}"
 }
 
+# ---------- DNS A Record ----------
+resource "cloudflare_record" "vps_a_record" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.subdomain
+  value   = var.vps_ip
+  type    = "A"
+  ttl     = 1
+  proxied = false
+  comment = "Managed by Terraform"
+}
+
 # ---------- Upload files to VPS ----------
-# DNS record is not managed here — the wildcard *.terraform.domain.com
-# record already exists in Cloudflare and covers all subdomains.
 resource "null_resource" "upload_files" {
   triggers = {
     vps_ip    = var.vps_ip
@@ -81,7 +90,10 @@ resource "null_resource" "vps_provision" {
     enable_monitoring = tostring(var.enable_monitoring)
   }
 
-  depends_on = [null_resource.upload_files]
+  depends_on = [
+    cloudflare_record.vps_a_record,
+    null_resource.upload_files,
+  ]
 
   connection {
     type        = "ssh"

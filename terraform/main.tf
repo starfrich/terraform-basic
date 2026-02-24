@@ -121,9 +121,13 @@ resource "null_resource" "vps_provision" {
       # Start the stack (nginx + app)
       var.enable_nginx ? "cd ${local.deploy_dir} && docker compose pull && docker compose up -d --remove-orphans" : "echo '==> Docker stack skipped'",
 
-      # Issue wildcard cert via DNS challenge (covers all *.terraform.domain.com)
-      # Requires certbot-dns-cloudflare plugin and CF credentials
-      var.enable_ssl && var.enable_nginx ? "echo '==> Issuing wildcard SSL cert via Cloudflare DNS challenge' && docker compose -f ${local.deploy_dir}/docker-compose.yml run --rm certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --email ${var.ssl_email} --agree-tos --no-eff-email -d ${local.wildcard_domain} && docker compose -f ${local.deploy_dir}/docker-compose.yml restart nginx" : "echo '==> SSL skipped'",
+      # Issue wildcard cert via DNS challenge, then write HTTPS nginx config and reload
+      var.enable_ssl && var.enable_nginx ? join(" && ", [
+        "echo '==> Issuing wildcard SSL cert via Cloudflare DNS challenge'",
+        "docker compose -f ${local.deploy_dir}/docker-compose.yml run --rm certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --email ${var.ssl_email} --agree-tos --no-eff-email -d ${local.wildcard_domain}",
+        "cat > ${local.deploy_dir}/nginx/conf.d/app.conf <<'NGINXCONF'\nserver {\n    listen 80;\n    server_name ${local.fqdn};\n    location /.well-known/acme-challenge/ { root /var/www/certbot; }\n    location / { return 301 https://$host$request_uri; }\n}\nserver {\n    listen 443 ssl;\n    server_name ${local.fqdn};\n    ssl_certificate /etc/letsencrypt/live/${local.wildcard_domain}/fullchain.pem;\n    ssl_certificate_key /etc/letsencrypt/live/${local.wildcard_domain}/privkey.pem;\n    ssl_protocols TLSv1.2 TLSv1.3;\n    location / {\n        proxy_pass http://app:3000;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection upgrade;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n    }\n}\nNGINXCONF",
+        "docker compose -f ${local.deploy_dir}/docker-compose.yml restart nginx",
+      ]) : "echo '==> SSL skipped'",
 
       # Beszel agent runs on the host (not in a container) to access Docker socket and host metrics
       var.enable_monitoring ? join("\n", [

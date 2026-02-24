@@ -51,7 +51,7 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
-      # Stop and remove containers only — does not touch DNS or Terraform state
+      # Stop and remove containers, images, volumes, then delete the deployment directory
       - name: Docker Compose Down
         if: github.event.inputs.target == 'containers'
         run: |
@@ -59,7 +59,7 @@ jobs:
             -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             "${{ secrets.SSH_USER }}@${{ secrets.VPS_IP }}" \
-            "cd /opt/app/${{ github.event.inputs.subdomain }} && docker compose down --rmi all --volumes"
+            "cd /opt/app/${{ github.event.inputs.subdomain }} && docker compose down --rmi all --volumes && rm -rf /opt/app/${{ github.event.inputs.subdomain }}"
 
       # Full destroy — removes all Terraform-managed resources
       - name: Terraform Destroy

@@ -8,7 +8,7 @@ output "public_ip" {
 }
 
 output "domain" {
-  description = "Fully qualified domain name pointing to the VPS"
+  description = "Fully qualified domain name for this deployment"
   value       = local.fqdn
 }
 

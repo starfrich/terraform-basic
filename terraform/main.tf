@@ -18,28 +18,22 @@ provider "cloudflare" {
 }
 
 locals {
-  fqdn         = var.subdomain == "@" ? var.domain : "${var.subdomain}.${var.domain}"
-  dns_hostname = var.subdomain == "@" ? var.domain : var.subdomain
-  deploy_dir   = "/opt/app"
-}
+  # e.g. staging-a1b2.terraform.domain.com
+  fqdn       = "${var.subdomain}.${var.domain}"
+  deploy_dir = "/opt/app/${var.subdomain}"
 
-# ---------- DNS A Record ----------
-resource "cloudflare_record" "vps_a_record" {
-  zone_id = var.cloudflare_zone_id
-  name    = local.dns_hostname
-  value   = var.vps_ip
-  type    = "A"
-  ttl     = 1
-  proxied = false
-  comment = "Managed by Terraform"
+  # Wildcard cert covers *.terraform.domain.com — no per-deploy cert needed
+  wildcard_domain = "*.${var.domain}"
 }
 
 # ---------- Upload files to VPS ----------
+# DNS record is not managed here — the wildcard *.terraform.domain.com
+# record already exists in Cloudflare and covers all subdomains.
 resource "null_resource" "upload_files" {
   triggers = {
     vps_ip    = var.vps_ip
     app_image = var.app_image
-    domain    = local.fqdn
+    subdomain = var.subdomain
   }
 
   connection {
@@ -51,7 +45,7 @@ resource "null_resource" "upload_files" {
     timeout     = "5m"
   }
 
-  # Create directory structure on VPS
+  # Create per-deployment directory structure on VPS
   provisioner "remote-exec" {
     inline = [
       "mkdir -p ${local.deploy_dir}/nginx/conf.d",
@@ -87,10 +81,7 @@ resource "null_resource" "vps_provision" {
     enable_monitoring = tostring(var.enable_monitoring)
   }
 
-  depends_on = [
-    cloudflare_record.vps_a_record,
-    null_resource.upload_files,
-  ]
+  depends_on = [null_resource.upload_files]
 
   connection {
     type        = "ssh"
@@ -122,15 +113,16 @@ resource "null_resource" "vps_provision" {
       # Start the stack (nginx + app)
       var.enable_nginx ? "cd ${local.deploy_dir} && docker compose pull && docker compose up -d --remove-orphans" : "echo '==> Docker stack skipped'",
 
-      # Request SSL after nginx is running; wait for DNS propagation first
+      # Issue wildcard cert via DNS challenge (covers all *.terraform.domain.com)
+      # Requires certbot-dns-cloudflare plugin and CF credentials
       var.enable_ssl && var.enable_nginx ? join("\n", [
-        "echo '==> Waiting 30s for DNS propagation...'",
-        "sleep 30",
+        "echo '==> Issuing wildcard SSL cert via Cloudflare DNS challenge'",
         "docker compose -f ${local.deploy_dir}/docker-compose.yml run --rm certbot certonly",
-        "  --webroot --webroot-path=/var/www/certbot",
+        "  --dns-cloudflare",
+        "  --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini",
         "  --email ${var.ssl_email}",
         "  --agree-tos --no-eff-email",
-        "  -d ${local.fqdn}",
+        "  -d ${local.wildcard_domain}",
         "docker compose -f ${local.deploy_dir}/docker-compose.yml restart nginx",
       ]) : "echo '==> SSL skipped'",
 

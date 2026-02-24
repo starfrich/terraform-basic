@@ -26,7 +26,8 @@ services:
     command: ["node", "server.js"]
 
   certbot:
-    image: certbot/certbot:latest
+    # certbot-dns-cloudflare image supports wildcard certs via DNS challenge
+    image: certbot/dns-cloudflare:latest
     volumes:
       - certbot_www:/var/www/certbot
       - certbot_conf:/etc/letsencrypt

@@ -33,9 +33,8 @@ variable "domain" {
 }
 
 variable "subdomain" {
-  description = "Subdomain to point to VPS. Use @ for root domain."
+  description = "Subdomain prefix for this deployment (e.g. staging-a1b2 or prod-x9y8). Combined with domain to form the FQDN."
   type        = string
-  default     = "@"
 }
 
 variable "cloudflare_api_token" {
